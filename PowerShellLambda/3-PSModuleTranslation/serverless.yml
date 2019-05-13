@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: A sample application for translating PowerShell Module Descriptions using Serverless
+
+Parameters:
+
+  QueueNamePrefix:
+    Type: String
+    Description: The SQS Queue Name Prefix
+    Default: translation
+
+  StageName:
+    Type: String
+    Description: 'The API Gateway StageName (https://url/<StageName>/<paths>)'
+    Default: api
+
+Transform: 'AWS::Serverless-2016-10-31'
+
+Globals:
+  Function:
+    Runtime: dotnetcore2.1
+
+Resources:
+
+  TranslateApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref StageName
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: !Ref 'AWS::StackName'
+        paths:
+          /get/{language}:
+            get:
+              parameters:
+                - name: language
+                  in: path
+                  required: true
+                  type: string
+                - name: name
+                  in: path
+                  required: true
+                  type: string
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub
+                  - 'arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations'
+                  - {
+                    Region: !Ref 'AWS::Region',
+                    FunctionArn: !GetAtt TranslateApiFunction.Arn
+                  }
+              responses: {}
+          /get/{language}/{name}:
+            get:
+              parameters:
+                - name: language
+                  in: path
+                  required: true
+                  type: string
+                - name: name
+                  in: path
+                  required: true
+                  type: string
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub
+                  - 'arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations'
+                  - {
+                    Region: !Ref 'AWS::Region',
+                    FunctionArn: !GetAtt TranslateApiFunction.Arn
+                  }
+              responses: {}
+          /find/{language}/{query}:
+            get:
+              parameters:
+                - name: language
+                  in: path
+                  required: true
+                  type: string
+                - name: query
+                  in: path
+                  required: true
+                  type: string
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub
+                  - 'arn:aws:apigateway:${Region}:lambda:path/2015-03-31/functions/${FunctionArn}/invocations'
+                  - {
+                    Region: !Ref 'AWS::Region',
+                    FunctionArn: !GetAtt TranslateApiFunction.Arn
+                  }
+              responses: {}
+
+  TranslateApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Packaged/TranslateApi.zip
+      Environment:
+        Variables:
+          TableName: !Ref Table
+          TableRegion: !Ref 'AWS::Region'
+      Events:
+        GetLanguage:
+          Type: Api
+          Properties:
+            Path: '/get/{language}'
+            Method: GET
+            RestApiId: !Ref TranslateApi
+        GetLanguageName:
+          Type: Api
+          Properties:
+            Path: '/get/{language}/{name}'
+            Method: GET
+            RestApiId: !Ref TranslateApi
+        FindLanguageQuery:
+          Type: Api
+          Properties:
+            Path: '/find/{language}/{query}'
+            Method: GET
+            RestApiId: !Ref TranslateApi
+      Handler: TranslateApi::TranslateApi.Bootstrap::ExecuteFunction
+      MemorySize: 512
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Table
+      Timeout: 30
+
+  TranslateApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${TranslateApiFunction}'
+      RetentionInDays: 5
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+
+  Table:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: code
+          AttributeType: S
+        -
+          AttributeName: name
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        -
+          AttributeName: code
+          KeyType: HASH
+        -
+          AttributeName: name
+          KeyType: RANGE
+
+  DeadLetterQueue:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'NestedTemplates\DeadLetterQueue.yml'
+      TimeoutInMinutes: 5
+
+  French:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'NestedTemplates\SQSQueue.yml'
+      TimeoutInMinutes: 5
+      Parameters:
+        QueueNamePrefix: !Ref QueueNamePrefix
+        LanguageCode: fr
+        SourceSNSTopicArn: !Ref SNSTopic
+        DeadLetterQueueArn: !GetAtt DeadLetterQueue.Outputs.DeadLetterQueue
+
+  German:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'NestedTemplates\SQSQueue.yml'
+      TimeoutInMinutes: 5
+      Parameters:
+        QueueNamePrefix: !Ref QueueNamePrefix
+        LanguageCode: de
+        SourceSNSTopicArn: !Ref SNSTopic
+        DeadLetterQueueArn: !GetAtt DeadLetterQueue.Outputs.DeadLetterQueue
+
+  Italian:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'NestedTemplates\SQSQueue.yml'
+      TimeoutInMinutes: 5
+      Parameters:
+        QueueNamePrefix: !Ref QueueNamePrefix
+        LanguageCode: it
+        SourceSNSTopicArn: !Ref SNSTopic
+        DeadLetterQueueArn: !GetAtt DeadLetterQueue.Outputs.DeadLetterQueue
+
+  Japanese:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'NestedTemplates\SQSQueue.yml'
+      TimeoutInMinutes: 5
+      Parameters:
+        QueueNamePrefix: !Ref QueueNamePrefix
+        LanguageCode: ja
+        SourceSNSTopicArn: !Ref SNSTopic
+        DeadLetterQueueArn: !GetAtt DeadLetterQueue.Outputs.DeadLetterQueue
+
+  Spanish:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: 'NestedTemplates\SQSQueue.yml'
+      TimeoutInMinutes: 5
+      Parameters:
+        QueueNamePrefix: !Ref QueueNamePrefix
+        LanguageCode: es
+        SourceSNSTopicArn: !Ref SNSTopic
+        DeadLetterQueueArn: !GetAtt DeadLetterQueue.Outputs.DeadLetterQueue
+
+  StartTranslationWorkflow:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Packaged/StartTranslationWorkflow.zip
+      Description: Starts the PowerShell Module Translation workflow
+      # Events:
+      #   ModulePrefixA:
+      #     Type: Schedule
+      #     Properties:
+      #       Schedule: rate(6 hours)
+      #       Input: '{"prefix":"AWS"}'
+      Environment:
+        Variables:
+          SNSTopicArn: !Ref SNSTopic
+      Handler: StartTranslationWorkflow::StartTranslationWorkflow.Bootstrap::ExecuteFunction
+      MemorySize: 1536
+      Policies:
+          - AWSLambdaBasicExecutionRole
+          - SNSPublishMessagePolicy:
+              TopicName: !GetAtt SNSTopic.TopicName
+      Timeout: 900
+
+  StartTranslationWorkflowLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${StartTranslationWorkflow}'
+      RetentionInDays: 5
+
+  PerformTranslation:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./Packaged/PerformTranslation.zip
+      Description: Performs Translation of PowerShell Module Descriptions
+      Events:
+        French:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt French.Outputs.SQSQueueArn
+            BatchSize: 10
+        German:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt German.Outputs.SQSQueueArn
+            BatchSize: 10
+        Italian:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt Italian.Outputs.SQSQueueArn
+            BatchSize: 10
+        Japanese:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt Japanese.Outputs.SQSQueueArn
+            BatchSize: 10
+        Spanish:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt Spanish.Outputs.SQSQueueArn
+            BatchSize: 10
+      Environment:
+        Variables:
+          TableName: !Ref Table
+          TableRegion: !Ref 'AWS::Region'
+      Handler: PerformTranslation::PerformTranslation.Bootstrap::ExecuteFunction
+      MemorySize: 1024
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref Table
+        - SQSPollerPolicy:
+            QueueName: !GetAtt French.Outputs.SQSQueueName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt German.Outputs.SQSQueueName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt Italian.Outputs.SQSQueueName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt Japanese.Outputs.SQSQueueName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt Spanish.Outputs.SQSQueueName
+        - Statement:
+          - Sid: AWSTranslate
+            Effect: Allow
+            Action:
+              - translate:TranslateText
+            Resource: '*'
+      Timeout: 60
+
+  PerformTranslationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${PerformTranslation}'
+      RetentionInDays: 5
+
+Outputs:
+
+  APIEndpoint:
+    Description: API Gateway Endpoint
+    Value: !Sub 'https://${TranslateApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'
+
+  StartTranslationWorkflow:
+    Description: Lambda Function for starting the Translation Workflow
+    Value: !Ref StartTranslationWorkflow

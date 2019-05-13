@@ -1,0 +1,26 @@
+{
+    "Sources": [
+        {
+            "Id": "SystemLog",
+            "SourceType": "WindowsEventLogSource",
+            "LogName": "System"
+        }
+    ],
+    "Sinks": [
+        {
+            "Id": "SystemLogKinesisFirehose",
+            "SinkType": "KinesisFirehose",
+            "Region": "us-east-2",
+            "StreamName": "KinesisSinkResources-SystemLogFirehose-1UHNQ0SQYN897",
+            "Format": "json"
+        }
+    ],
+    "Pipes": [
+        {
+            "Id": "SystemLogToKinesisFirehose",
+            "SourceRef": "SystemLog",
+            "SinkRef": "SystemLogKinesisFirehose"
+        }
+    ],
+    "SelfUpdate": 0
+}

@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: Spot Fleet to demonstrate the Kinesis Agent for Windows
+
+Parameters:
+
+  Server2019Core:
+    Description: Windows Server 2019 Core
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    AllowedValues:
+      - "/aws/service/ami-windows-latest/Windows_Server-2019-English-Core-Base"
+    Default: "/aws/service/ami-windows-latest/Windows_Server-2019-English-Core-Base"
+
+  InstanceType:
+    Type: String
+    Description: The instance type
+    AllowedValues:
+      - t3.medium
+      - t3.large
+      - m5.medium
+      - m5.large
+    Default: t3.medium
+
+  SecurityGroupId:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair to launch the instance with
+
+  TargetCapacity:
+    Type: String
+    Default: 1
+
+Resources:
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: EC2InstanceRole
+
+  SpotFleetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - spotfleet.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetRole
+      Path: /
+
+  SpotLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: 60
+              VolumeType: gp2
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        ImageId: !Ref Server2019Core
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPair
+        SecurityGroupIds: !Ref SecurityGroupId
+        TagSpecifications:
+          -
+            ResourceType: instance
+            Tags:
+              -
+                Key: Name
+                Value: KinesisDemoInstance
+              -
+                Key: Logging
+                Value: Enabled
+
+  SpotFleet:
+    Type: AWS::EC2::SpotFleet
+    Properties:
+      SpotFleetRequestConfigData:
+        AllocationStrategy: diversified
+        IamFleetRole: !GetAtt SpotFleetRole.Arn
+        LaunchTemplateConfigs:
+          -
+            LaunchTemplateSpecification:
+              LaunchTemplateId: !Ref SpotLaunchTemplate
+              Version: !GetAtt SpotLaunchTemplate.LatestVersionNumber
+        TargetCapacity:
+          Ref: TargetCapacity
+        TerminateInstancesWithExpiration: true

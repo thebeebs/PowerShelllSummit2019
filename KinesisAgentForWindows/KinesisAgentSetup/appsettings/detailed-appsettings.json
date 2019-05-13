@@ -1,0 +1,44 @@
+{
+  "Sources": [
+    {
+      "Id": "SystemLog",
+      "SourceType": "WindowsEventLogSource",
+      "LogName": "System"
+    },
+    {
+      "Id": "PowerShellLog",
+      "SourceType": "WindowsEventLogSource",
+      "LogName": "Microsoft-Windows-PowerShell/Operational",
+      "Query": "*[System/EventID=4104]"
+    }
+  ],
+  "Sinks": [
+    {
+      "Id": "SystemLogKinesisFirehose",
+      "SinkType": "KinesisFirehose",
+      "Region": "us-east-2",
+      "StreamName": "SampleKinesisFirehoseStreamName",
+      "Format": "json"
+    },
+    {
+      "Id": "PowerShellLogKinesisStream",
+      "SinkType": "KinesisStream",
+      "Region": "us-east-2",
+      "StreamName": "SampleKinesisStreamName",
+      "Format": "json"
+    }
+  ],
+  "Pipes": [
+    {
+      "Id": "SystemLogToKinesisFirehose",
+      "SourceRef": "SystemLog",
+      "SinkRef": "SystemLogKinesisFirehose"
+    },
+    {
+      "Id": "PowerShellLogToKinesisStream",
+      "SourceRef": "PowerShellLog",
+      "SinkRef": "PowerShellLogKinesisStream"
+    }
+  ],
+  "SelfUpdate": 0
+}

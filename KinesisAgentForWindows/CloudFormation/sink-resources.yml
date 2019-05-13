@@ -1,0 +1,150 @@
+# CFN Template needs to deploy:
+#  - Kinesis Firehose
+#  - S3 Bucket
+#  - Lambda Function
+#  - Custom CloudWatch LogGroup
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform: AWS::Serverless-2016-10-31
+
+Description: AWS Resources to demonstrate Kinesis Agent for Windows
+
+Resources:
+
+  PowerShellStream:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      ShardCount: 3
+
+  PowerShellMetrics:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .\PowerShellMetricsPackage\PowerShellMetrics.zip
+      Handler: PowerShellMetrics::PowerShellMetrics.Bootstrap::ExecuteFunction
+      MemorySize: 512
+      Runtime: dotnetcore2.1
+      Timeout: 60
+      Policies:
+        - KinesisStreamReadPolicy:
+            StreamName: !Ref PowerShellStream
+        - Statement:
+          - Sid: AllowMetrics
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricData
+            Resource: '*'
+      Events:
+        Kinesis:
+          Type: Kinesis
+          Properties:
+            Stream: !GetAtt PowerShellStream.Arn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+            Enabled: true
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${PowerShellMetrics}'
+      RetentionInDays: 1
+
+  SystemLogFirehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !GetAtt FirehoseS3Target.Arn
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 1
+        CompressionFormat: UNCOMPRESSED
+        Prefix: SystemLog/
+        RoleARN: !GetAtt FirehoseRole.Arn
+
+  SystemLogFirehoseLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/kinesisfirehose/${SystemLogFirehose}'
+      RetentionInDays: 5
+
+  FirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref AWS::AccountId
+      Path: /
+      Policies:
+        - PolicyName: KinesisPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetBucketLocation
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub 'arn:aws:s3:::${FirehoseS3Target}'
+                  - !Sub 'arn:aws:s3:::${FirehoseS3Target}/*'
+              -
+                Effect: Allow
+                Action:
+                  - kinesis:DescribeStream
+                  - kinesis:GetRecords
+                  - kinesis:GetShardIterator
+                Resource:
+                  - !Sub 'arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/*'
+              -
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+
+  FirehoseS3Target:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: BucketOwnerFullControl
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          -
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 3
+            ExpirationInDays: 3
+            NoncurrentVersionExpirationInDays: 3
+            Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        -
+          Key: Description
+          Value: S3 Bucket for Kinesis Firehose Delivery
+
+Outputs:
+  SystemLogFirehoseName:
+    Value: !Ref SystemLogFirehose
+
+  PowerShellStreamName:
+    Value: !Ref PowerShellStream

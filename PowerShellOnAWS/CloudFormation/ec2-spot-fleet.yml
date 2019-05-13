@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: "0-60 PowerShell on AWS. DSC Demo"
+
+Parameters:
+
+  Server2019Core:
+    Description: Windows Server 2019 Core
+    Type: "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>"
+    AllowedValues:
+      - "/aws/service/ami-windows-latest/Windows_Server-2019-English-Core-Base"
+    Default: "/aws/service/ami-windows-latest/Windows_Server-2019-English-Core-Base"
+
+  NameTag:
+    Type: String
+    Description: Used to define the EC2 Name Tag
+    Default: DSCDemo
+
+  InstanceType:
+    Type: String
+    Description: The instance type
+    AllowedValues:
+      - t3.medium
+      - t3.large
+      - m5.medium
+      - m5.large
+    Default: t3.medium
+
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: EC2 Key Pair to launch the instance with
+    Default: demo-us-east-1
+
+  TargetCapacity:
+    Type: String
+    Description: The number of EC2 Instances to launch in the Spot request
+    Default: 1
+
+Resources:
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: EC2InstanceRole
+
+  SpotFleetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - spotfleet.amazonaws.com
+        Version: '2012-10-17'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetRole
+      Path: /
+
+  SpotSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Security group for the ${NameTag} Fleet"
+      VpcId: !ImportValue VPC-VPCID
+
+  SpotLaunchTemplate1:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: 60
+              VolumeType: gp2
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        ImageId: !Ref Server2019Core
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPair
+        SecurityGroupIds:
+          - !Ref SpotSecurityGroup
+        TagSpecifications:
+          -
+            ResourceType: instance
+            Tags:
+              -
+                Key: Name
+                Value: !Ref NameTag
+              -
+                Key: Environment
+                Value: Production
+
+  SpotLaunchTemplate2:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              DeleteOnTermination: true
+              VolumeSize: 60
+              VolumeType: gp2
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        ImageId: !Ref Server2019Core
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPair
+        SecurityGroupIds:
+          - !Ref SpotSecurityGroup
+        TagSpecifications:
+          -
+            ResourceType: instance
+            Tags:
+              -
+                Key: Name
+                Value: !Ref NameTag
+              -
+                Key: Environment
+                Value: Test
+
+  SpotFleet1:
+    Type: AWS::EC2::SpotFleet
+    Properties:
+      SpotFleetRequestConfigData:
+        AllocationStrategy: diversified
+        IamFleetRole: !GetAtt SpotFleetRole.Arn
+        LaunchTemplateConfigs:
+          -
+            LaunchTemplateSpecification:
+              LaunchTemplateId: !Ref SpotLaunchTemplate1
+              Version: !GetAtt SpotLaunchTemplate1.LatestVersionNumber
+            Overrides:
+              -
+                SubnetId: !ImportValue VPC-PrivateSubnet1AID
+        TargetCapacity:
+          Ref: TargetCapacity
+        TerminateInstancesWithExpiration: true
+
+  SpotFleet2:
+    Type: AWS::EC2::SpotFleet
+    Properties:
+      SpotFleetRequestConfigData:
+        AllocationStrategy: diversified
+        IamFleetRole: !GetAtt SpotFleetRole.Arn
+        LaunchTemplateConfigs:
+          -
+            LaunchTemplateSpecification:
+              LaunchTemplateId: !Ref SpotLaunchTemplate2
+              Version: !GetAtt SpotLaunchTemplate2.LatestVersionNumber
+            Overrides:
+              -
+                SubnetId: !ImportValue VPC-PrivateSubnet2AID
+        TargetCapacity:
+          Ref: TargetCapacity
+        TerminateInstancesWithExpiration: true
+
+  SSMParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: DSCDemoParameter
+      Type: String
+      Value: This value came from SSM
+      Description: An SSM Parameter used to demonstrate DSC Token Substitution

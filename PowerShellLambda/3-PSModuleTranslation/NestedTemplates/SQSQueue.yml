@@ -1,0 +1,95 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: A sample application for translating PowerShell Module Descriptions using Serverless
+
+Parameters:
+
+  QueueNamePrefix:
+    Type: String
+    Description: The SQS Queue Name Prefix
+
+  LanguageCode:
+    Type: String
+    Description: The Amazon Translate language code for this SQS Queue
+
+  SourceSNSTopicArn:
+    Type: String
+    Description: The SNS Topic Arn this SQS Queue is subscribed to
+
+  DeadLetterQueueArn:
+    Type: String
+    Description: The SQS Queue Arn for the Dead Letter Queue
+
+Resources:
+
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${QueueNamePrefix}-${LanguageCode}'
+      VisibilityTimeout: 90
+      RedrivePolicy:
+        deadLetterTargetArn: !Ref DeadLetterQueueArn
+        maxReceiveCount: 5
+      Tags:
+        -
+          Key: StackId
+          Value: !Ref AWS::StackId
+
+  SQSQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref SQSQueue
+      PolicyDocument:
+        Id: AllowIncomingAccess
+        Statement:
+          -
+            Effect: Allow
+            Principal: '*'
+            Action:
+              - sqs:SendMessage
+            Resource:
+              - !GetAtt SQSQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref SourceSNSTopicArn
+
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SourceSNSTopicArn
+      Endpoint: !GetAtt SQSQueue.Arn
+      Protocol: sqs
+      RawMessageDelivery: true
+
+  SQSQueueAgeOfOldestMessage:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub
+        - '${SQSQueueName}_AgeOfOldestMessage'
+        - {SQSQueueName: !GetAtt SQSQueue.QueueName}
+      AlarmDescription: !Sub
+        - 'Alarms if the ${SQSQueueName} SQS Queue has messages in it for too long'
+        - {SQSQueueName: !GetAtt SQSQueue.QueueName}
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt SQSQueue.QueueName
+      DatapointsToAlarm: 2
+      EvaluationPeriods: 3
+      MetricName: ApproximateAgeOfOldestMessage
+      Namespace: AWS/SQS
+      Period: 300
+      Statistic: Maximum
+      Threshold: 30
+      TreatMissingData: notBreaching
+      Unit: Seconds
+
+Outputs:
+
+  SQSQueueName:
+    Value: !GetAtt SQSQueue.QueueName
+
+  SQSQueueArn:
+    Value: !GetAtt SQSQueue.Arn

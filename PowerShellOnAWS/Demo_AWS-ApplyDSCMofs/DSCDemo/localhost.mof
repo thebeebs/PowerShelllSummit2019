@@ -1,0 +1,69 @@
+/*
+@TargetNode='localhost'
+@GeneratedBy=pearca
+@GenerationDate=05/08/2019 15:58:29
+@GenerationHost=DESKTOP-GQ4TK8L
+*/
+
+instance of MSFT_FileDirectoryConfiguration as $MSFT_FileDirectoryConfiguration1ref
+{
+SourceInfo = "::8::9::File";
+ ResourceID = "[File]CreateFolder";
+ Type = "Directory";
+ DestinationPath = "{env:SystemDrive}\\AWS";
+ ModuleName = "PSDesiredStateConfiguration";
+
+ModuleVersion = "1.0";
+ ConfigurationName = "DSCDemo";
+};
+instance of MSFT_FileDirectoryConfiguration as $MSFT_FileDirectoryConfiguration2ref
+{
+SourceInfo = "::14::9::File";
+ ResourceID = "[File]CreateEnvironmentFile";
+ Type = "File";
+ DestinationPath = "{env:SystemDrive}\\AWS\\{tag:Environment}.txt";
+ ModuleName = "PSDesiredStateConfiguration";
+ Contents = "{ssm:DSCDemoParameter}";
+
+ModuleVersion = "1.0";
+ ConfigurationName = "DSCDemo";
+};
+instance of MSFT_Credential as $MSFT_Credential1ref
+{
+Password = "This is ignored!";
+ UserName = "arn:aws:secretsmanager:us-east-1:844743001533:secret:DSCDemoUserAccount-mgk65V";
+
+};
+
+instance of MSFT_UserResource as $MSFT_UserResource1ref
+{
+SourceInfo = "::24::9::User";
+ UserName = "DSCDemoUserAccount";
+ ResourceID = "[User]DSCDemoUserAccount";
+ Ensure = "Present";
+ FullName = "DSC Demo User";
+ Description = "This is a local user created by DSC on AWS";
+ Password = $MSFT_Credential1ref;
+ ModuleName = "PsDesiredStateConfiguration";
+
+ModuleVersion = "1.0";
+ ConfigurationName = "DSCDemo";
+};
+instance of OMI_ConfigurationDocument
+
+                    {
+ Version="2.0.0";
+ 
+                        MinimumCompatibleVersion = "1.0.0";
+ 
+                        CompatibleVersionAdditionalProperties= {"Omi_BaseResource:ConfigurationName"};
+ 
+                        Author="pearca";
+ 
+                        GenerationDate="05/08/2019 15:58:29";
+ 
+                        GenerationHost="DESKTOP-GQ4TK8L";
+ 
+                        Name="DSCDemo";
+
+                    };
