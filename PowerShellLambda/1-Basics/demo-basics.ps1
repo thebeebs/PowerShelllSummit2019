@@ -1,4 +1,4 @@
-$filePath = "$global:demoroot\1-Introduction\1_BasicScript"
+$filePath = "$global:demoroot\1-Basics\"
 Set-Location -Path $filePath
 
 <#
@@ -19,7 +19,7 @@ Get-AWSPowerShellLambdaTemplate
 <#
     Lets have a look
 #>
-$functionName = 'Demo1-BasicScript'
+$functionName = 'demo-basics'
 New-AWSPowerShellLambda -Template 'Basic' -ScriptName $functionName
 
 <#

@@ -1,4 +1,4 @@
-function Invoke-ModuleFunction
+function Invoke-Me
 {
     param
     (
@@ -17,7 +17,7 @@ function Invoke-ModuleFunction
     #Write-Error -Message 'Write-Error even works'
 
     if ($LambdaInput.name) {
-        'Hello {0}' -f $LambdaInput.name
+        'Hello {0}!' -f $LambdaInput.name
     }
     else {
         'Hello World!'

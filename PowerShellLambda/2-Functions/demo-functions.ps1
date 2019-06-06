@@ -1,15 +1,15 @@
-Set-Location -Path "$global:demoroot\1-Introduction\2_Function"
+Set-Location -Path "$global:demoroot\2-Functions\"
 
 <#
     Create a Basic Lambda Function as a script
 #>
-$functionName = 'Demo2-Function'
+$functionName = 'demo-functions'
 code ".\$functionName\$functionName.ps1"
 
 <#
     Retrieve the IAM Role to prevent prompt
 #>
-$iamRoleName = 'PoshSummit2019'
+$iamRoleName = 'DemoLambdaIAM'
 $iamRoleArn = (Get-IAMRole -RoleName $iamRoleName).Arn
 
 <#
@@ -30,7 +30,7 @@ Publish-AWSPowerShellLambda @publishAWSPowerShellLambdaSplat
 #>
 $invokeLMFunctionSplat = @{
     FunctionName = $functionName
-    Payload      = ConvertTo-Json -InputObject @{name = 'PowerShell Summit'}
+    Payload      = ConvertTo-Json -InputObject @{name = 'PSConfEu'}
     LogType      = 'Tail'
 }
 $response = Invoke-LMFunction @invokeLMFunctionSplat
